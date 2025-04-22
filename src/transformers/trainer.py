@@ -2502,10 +2502,12 @@ class Trainer:
             if args.gradient_accumulation_steps == 1:
                 total_updates -= 1
             for _ in range(total_updates):
+                print('TEST', 'total')
                 update_step += 1
                 num_batches = args.gradient_accumulation_steps if update_step != (total_updates - 1) else remainder
                 batch_samples, num_items_in_batch = self.get_batch_samples(epoch_iterator, num_batches, args.device)
                 for i, inputs in enumerate(batch_samples):
+                    print('TEST', 'batch')
                     step += 1
                     do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
                     # Since we perform prefetching, we need to manually set sync_gradients
@@ -2617,6 +2619,7 @@ class Trainer:
                         self.state.global_step += 1
                         self.state.epoch = epoch + (step + 1 + steps_skipped) / steps_in_epoch
                         self.control = self.callback_handler.on_step_end(args, self.state, self.control)
+                        print('TEST', 'call _maybe_log_save_evaluate')
                         self._maybe_log_save_evaluate(
                             tr_loss,
                             grad_norm,
@@ -2651,6 +2654,7 @@ class Trainer:
                 self.control.should_training_stop = True
 
             self.control = self.callback_handler.on_epoch_end(args, self.state, self.control)
+            print('TEST', 'call _maybe_log_save_evaluate 2')
             self._maybe_log_save_evaluate(
                 tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time, learning_rate=learning_rate
             )
@@ -3058,6 +3062,7 @@ class Trainer:
     def _maybe_log_save_evaluate(
         self, tr_loss, grad_norm, model, trial, epoch, ignore_keys_for_eval, start_time, learning_rate=None
     ):
+        print('TEST', 'enter _maybe_log_save_evaluate')
         if self.control.should_log and self.state.global_step > self._globalstep_last_logged:
             if is_torch_xla_available():
                 xm.mark_step()
@@ -3093,8 +3098,11 @@ class Trainer:
                 self.control.should_save = is_new_best_metric
 
         if self.control.should_save:
+            print('TEST', 'call _save_checkpoint')
             self._save_checkpoint(model, trial)
+            print('TEST', 'return _save_checkpoint')
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
+        print('TEST', 'exit _maybe_log_save_evaluate')
 
     def _load_rng_state(self, checkpoint):
         # Load RNG states from `checkpoint`
@@ -3190,41 +3198,54 @@ class Trainer:
 
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
+        print('TEST', 'call save model')
+        print('TEST', self.model)
         self.save_model(output_dir, _internal_call=True)
 
         if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH] and self.state.best_global_step:
             best_checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.best_global_step}"
             best_checkpoint_dir = os.path.join(run_dir, best_checkpoint_folder)
 
+            print('TEST', 'best checkpoint')
+
             if os.path.exists(best_checkpoint_dir):
                 self.state.best_model_checkpoint = best_checkpoint_dir
 
         if not self.args.save_only_model:
             # Save optimizer and scheduler
+            print('TEST', 'save optimizer')
             self._save_optimizer_and_scheduler(output_dir)
+            print('TEST', 'save scaler')
             self._save_scaler(output_dir)
+            print('TEST', 'save RNG')
             # Save RNG state
             self._save_rng_state(output_dir)
 
         # Save the Trainer state
         if self.args.should_save:
+            print('TEST', 'save state')
             # Update `ExportableState` callbacks and `TrainerControl` state to where we are currently
             for cb in [
                 cb for cb in self.callback_handler.callbacks + [self.control] if isinstance(cb, ExportableState)
             ]:
                 cb_name = cb.__class__.__name__
+                print('TEST', cb)
                 cb_state = cb.state()
                 if isinstance(self.state.stateful_callbacks[cb_name], list):
                     self.state.stateful_callbacks[cb_name].append(cb_state)
                 else:
                     self.state.stateful_callbacks[cb_name] = cb_state
+                print('TEST', 'cb done')
+            print('TEST', 'save to json')
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
         if self.args.push_to_hub:
+            print('TEST', 'push to hub')
             self._push_from_checkpoint(output_dir)
 
         # Maybe delete some older checkpoints.
         if self.args.should_save:
+            print('TEST', 'rotate')
             # we use mtime as default, filesystems without mtime support will be detected in `_sorted_checkpoints`
             self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
 
@@ -3320,9 +3341,13 @@ class Trainer:
                 self.model_wrapped.save_checkpoint(output_dir)
         elif self.is_fsdp_enabled:
             # save fsdp specific ckpt for resuming from ckpt
+            print('TEST', 'save_fsdp_model')
+            print('TEST', self.model)
+            print('TEST adapter', self.model.active_adapter)
             save_fsdp_model(
                 self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir, **_get_fsdp_ckpt_kwargs()
             )
+            print('TEST', 'save_fsdp_optimizer')
             save_fsdp_optimizer(
                 self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
             )
@@ -3339,6 +3364,7 @@ class Trainer:
             and (not self.is_deepspeed_enabled or is_deepspeed_custom_scheduler)
             and not is_torch_xla_available()
         ):
+            print('TEST', 'torch save')
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
             reissue_pt_warnings(caught_warnings)
